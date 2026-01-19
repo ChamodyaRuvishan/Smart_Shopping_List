@@ -21,10 +21,12 @@ class ListDetailsScreen extends StatefulWidget {
 class _ListDetailsScreenState extends State<ListDetailsScreen> {
   final TextEditingController _itemController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController();
+  String _selectedPriority = 'medium';
 
-  // Function to Add Item with Quantity
   void _addItem() {
     if (_itemController.text.isEmpty) return;
+
+    final priorityOrder = {'high': 0, 'medium': 1, 'low': 2};
 
     FirebaseFirestore.instance
         .collection('groups')
@@ -35,6 +37,8 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
         .add({
           'name': _itemController.text,
           'quantity': _qtyController.text.isEmpty ? "1" : _qtyController.text,
+          'priority': _selectedPriority,
+          'priorityOrder': priorityOrder[_selectedPriority] ?? 2,
           'isBought': false,
           'boughtBy': null,
           'addedAt': FieldValue.serverTimestamp(),
@@ -42,75 +46,99 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
 
     _itemController.clear();
     _qtyController.clear();
+    _selectedPriority = 'medium';
     Navigator.pop(context);
   }
 
-  // Show Input Dialog
   void _showAddItemSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Add Item", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            
-            // Row to put Name and Quantity side-by-side
-            Row(
-              children: [
-                // Item Name (Takes up most space)
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: _itemController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: "Item Name",
-                      hintText: "e.g. Milk",
-                      border: OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Add Item", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 15),
+              
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _itemController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: "Item Name",
+                        hintText: "e.g. Milk",
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                // Quantity (Takes up small space)
-                Expanded(
-                  flex: 1,
-                  child: TextField(
-                    controller: _qtyController,
-                    keyboardType: TextInputType.text, // Text allowed (e.g., "1kg")
-                    decoration: const InputDecoration(
-                      labelText: "Qty",
-                      hintText: "1",
-                      border: OutlineInputBorder(),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 1,
+                    child: TextField(
+                      controller: _qtyController,
+                      keyboardType: TextInputType.text,
+                      decoration: const InputDecoration(
+                        labelText: "Qty",
+                        hintText: "1",
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                    onSubmitted: (_) => _addItem(),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _addItem,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                child: const Text("Add to List"),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 15),
+              
+              const Text("Priority", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: ['high', 'medium', 'low'].map((priority) {
+                  final colors = {'high': Colors.red, 'medium': Colors.orange, 'low': Colors.green};
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(priority.toUpperCase()),
+                        selected: _selectedPriority == priority,
+                        onSelected: (selected) {
+                          setModalState(() => _selectedPriority = priority);
+                        },
+                        selectedColor: colors[priority],
+                        labelStyle: TextStyle(
+                          color: _selectedPriority == priority ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _addItem,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  child: const Text("Add to List"),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Toggle Checkbox (Now saves WHO bought it)
   void _toggleItem(String itemId, bool currentStatus) {
     final user = FirebaseAuth.instance.currentUser!;
     final String userName = user.email!.split('@')[0];
@@ -128,7 +156,6 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
         });
   }
 
-  // Delete Item
   void _deleteItem(String itemId) {
     FirebaseFirestore.instance
         .collection('groups')
@@ -158,12 +185,31 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
             .collection('lists')
             .doc(widget.listId)
             .collection('items')
-            .orderBy('addedAt', descending: true)
+            .orderBy('priorityOrder', descending: false)
             .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           
           var items = snapshot.data!.docs;
+          
+          // Sort items by priorityOrder first, then by addedAt (newest first)
+          items.sort((a, b) {
+            var dataA = a.data() as Map<String, dynamic>;
+            var dataB = b.data() as Map<String, dynamic>;
+            
+            int priorityCompare = (dataA['priorityOrder'] ?? 2).compareTo(dataB['priorityOrder'] ?? 2);
+            if (priorityCompare != 0) return priorityCompare;
+            
+            // If same priority, sort by addedAt (newest first)
+            Timestamp? timestampA = dataA['addedAt'] as Timestamp?;
+            Timestamp? timestampB = dataB['addedAt'] as Timestamp?;
+            
+            if (timestampA == null || timestampB == null) return 0;
+            return timestampB.compareTo(timestampA);
+          });
 
           if (items.isEmpty) {
             return Center(
@@ -188,6 +234,7 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
               bool isBought = data['isBought'] ?? false;
               String quantity = data['quantity'] ?? "1";
               String? boughtBy = data['boughtBy'];
+              String priority = data['priority'] ?? 'medium';
 
               return Dismissible(
                 key: Key(doc.id),
@@ -214,17 +261,28 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
                     ),
                     title: Row(
                       children: [
-                        Text(
-                          data['name'],
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            decoration: isBought ? TextDecoration.lineThrough : null,
-                            color: isBought ? Colors.grey : Colors.black,
+                        Container(
+                          width: 4,
+                          height: 24,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: priority == 'high' ? Colors.red : 
+                                   priority == 'medium' ? Colors.orange : Colors.green,
+                            borderRadius: BorderRadius.circular(2)
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            data['name'],
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              decoration: isBought ? TextDecoration.lineThrough : null,
+                              color: isBought ? Colors.grey : Colors.black,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Quantity Badge
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -245,15 +303,10 @@ class _ListDetailsScreenState extends State<ListDetailsScreen> {
                     subtitle: isBought 
                       ? Text("Bought by $boughtBy", style: const TextStyle(color: Colors.teal, fontSize: 12, fontStyle: FontStyle.italic))
                       : null,
-
-trailing: IconButton(
-        icon: const Icon(Icons.close, color: Colors.grey, size: 20),
-        onPressed: () {
-           // Direct delete without swiping
-           _deleteItem(doc.id);
-        },
-      ),
-
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                      onPressed: () => _deleteItem(doc.id),
+                    ),
                   ),
                 ),
               );

@@ -88,6 +88,52 @@ class FirestoreService {
     await logActivity("Created list: $name in a group");
   }
 
+  // --- ITEMS (Stored at list level, with priority support) ---
+  Future<void> addItem(String groupId, String listId, String itemName, String quantity, String priority) async {
+    final priorityOrder = {'high': 0, 'medium': 1, 'low': 2};
+    await _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .add({
+          'name': itemName,
+          'quantity': quantity,
+          'priority': priority,
+          'priorityOrder': priorityOrder[priority] ?? 2,
+          'isBought': false,
+          'boughtBy': null,
+          'addedAt': FieldValue.serverTimestamp(),
+        });
+    await logActivity("Added item: $itemName to a list");
+  }
+
+  Future<void> deleteItem(String groupId, String listId, String itemId) async {
+    await _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .doc(itemId)
+        .delete();
+  }
+
+  Future<void> updateItemStatus(String groupId, String listId, String itemId, bool isBought, String? boughtBy) async {
+    await _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .doc(itemId)
+        .update({
+          'isBought': isBought,
+          'boughtBy': boughtBy,
+        });
+  }
+
   Future<void> deleteList(String groupId, String listId, String listName) async {
     // Delete list from group
     await _db.collection('groups').doc(groupId).collection('lists').doc(listId).delete();
@@ -120,5 +166,18 @@ class FirestoreService {
         .collection('lists')
         .doc(listId)
         .update({'isCompleted': isCompleted});
+  }
+
+  // Get items for a list sorted by priority
+  Stream<QuerySnapshot> getListItems(String groupId, String listId) {
+    return _db
+        .collection('groups')
+        .doc(groupId)
+        .collection('lists')
+        .doc(listId)
+        .collection('items')
+        .orderBy('priorityOrder', descending: false)
+        .orderBy('addedAt', descending: true)
+        .snapshots();
   }
 }
