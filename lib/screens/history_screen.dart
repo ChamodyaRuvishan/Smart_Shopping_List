@@ -3,9 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final String userId = FirebaseAuth.instance.currentUser!.uid;
@@ -18,11 +23,13 @@ class HistoryScreen extends StatelessWidget {
             .doc(userId)
             .collection('userActivities')
             .orderBy('timestamp', descending: true)
+            .limit(50)
             .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-
-          if (snapshot.data!.docs.isEmpty) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text("No activity yet."));
           }
 
@@ -33,12 +40,7 @@ class HistoryScreen extends StatelessWidget {
               var doc = snapshot.data!.docs[index];
               var data = doc.data() as Map<String, dynamic>;
               
-              // Handle Timestamp
-              DateTime date = DateTime.now();
-              if (data['timestamp'] != null) {
-                date = (data['timestamp'] as Timestamp).toDate();
-              }
-              
+              DateTime date = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
               String timeStr = DateFormat('h:mm a').format(date);
               String dateStr = DateFormat('MMM d, yyyy').format(date);
 
