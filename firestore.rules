@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection - Each user can only read/write their own document
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
+      
+      // User's activities subcollection
+      match /userActivities/{activity} {
+        allow read, write: if request.auth.uid == userId;
+      }
+    }
+    
+    // Allow authenticated users to read all users (for adding members)
+    match /users/{userId} {
+      allow read: if request.auth != null;
+    }
+    
+    // Groups collection - Shared at root level
+    match /groups/{groupId} {
+      // Users who are members of the group can read it
+      allow read: if request.auth.uid in resource.data.memberIds;
+      
+      // Group members can delete, update groups
+      allow delete, update: if request.auth.uid in resource.data.memberIds;
+      
+      // Allow creating new groups
+      allow create: if request.auth != null;
+      
+      // Lists subcollection in groups
+      match /lists/{listId} {
+        // Any group member can read and manage lists
+        allow read, write: if request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        
+        // Items in lists
+        match /items/{item} {
+          allow read, write: if request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        }
+      }
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
